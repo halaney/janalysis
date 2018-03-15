@@ -1,0 +1,13 @@
+language: python
+python:
+  - "3.6"
+
+# command to install dependencies
+install:
+  - pip install pipenv flake8 pylint
+  - make init
+
+# command to run tests
+script:
+  - make test
+  - make lint
