@@ -5,5 +5,5 @@ init:
 	pipenv install --dev
 
 lint:
-	flake8
-	pylint janalysis tests/*.py
+	pipenv run flake8
+	pipenv run pylint janalysis tests/*.py
