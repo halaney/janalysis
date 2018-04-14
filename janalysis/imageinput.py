@@ -1,5 +1,6 @@
 """Handles reading in images and preparing them for compression."""
 import numpy
+import PIL.Image
 
 
 def create_matrices_pixel_sequence(pixels, width, height):
@@ -36,3 +37,30 @@ def create_matrices_pixel_sequence(pixels, width, height):
         end_of_row = start_of_row + width
 
     return matrices
+
+
+def get_image(path):
+    """Gets an Image object representation of the image at path."""
+    return PIL.Image.open(path)
+
+
+def crop_image_to_multiple_eight(image):
+    """Returns a crop of an image to be multiples of 8."""
+    dimensions = image.size
+    width = dimensions[0]
+    height = dimensions[1]
+    new_width = width - (width % 8)
+    new_height = height - (height % 8)
+    box = (0, 0, new_width, new_height)
+    return image.crop(box)
+
+
+def get_ycbcr_bands(image):
+    """Returns a tuple of the 3 bands (Y, Cb, Cr)."""
+    color_transformed = image.convert(mode='YCbCr')
+    return color_transformed.split()
+
+
+def get_pixels(band):
+    """Returns a list of pixels given a band."""
+    return list(band.getdata())

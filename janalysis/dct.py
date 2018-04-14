@@ -1,6 +1,7 @@
 """Implements the DCT."""
 from math import cos, pi, sqrt
 import numpy
+import scipy.fftpack
 
 
 def dct2(x_list, n_point=None):
@@ -41,6 +42,12 @@ def dct2_twod_orthonormal(two_d_array):
                                                                 col_index,
                                                                 two_d_array)
     return output
+
+
+def dct2_scipy(two_d_array):
+    """Implements the 2d orthonormal dct using scipy (much quicker)."""
+    return scipy.fftpack.dct(scipy.fftpack.dct(two_d_array.T, norm='ortho')
+                             .T, norm='ortho')
 
 
 def _get_twod_value_dct2(output_row_index, output_column_index, two_d_array):
