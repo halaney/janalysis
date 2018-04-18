@@ -2,11 +2,11 @@
 import numpy
 from .dct import dct2_twod_orthonormal, dct2_scipy
 from .huffman import JPEG_HUFFMAN_DC_LUM, JPEG_HUFFMAN_AC_LUM
-from .imageinput import get_image, crop_image_to_multiple_eight, \
-                        get_ycbcr_bands, get_pixels, \
-                        create_matrices_pixel_sequence
-from .utils import ZIGZAG_ORDER, get_huffman_table_bit_string, \
-                   get_magnitude_dc, get_ones_complement_bit_string
+from .imageinput import get_image, crop_image_to_multiple_eight
+from .imageinput import get_ycbcr_bands, get_pixels
+from .imageinput import create_matrices_pixel_sequence
+from .utils import ZIGZAG_ORDER, get_huffman_table_bit_string
+from .utils import get_magnitude_dc, get_ones_complement_bit_string
 
 
 # Make this a command line arg
@@ -92,22 +92,11 @@ def jpeg_encode(input_path):
         run_length = []
         while serial_index < 64:
             if serial_index == 0:
-                # DC component is treated differently
-                # DC should be a 1 byte code representing length of following bits
-                # the literal bits are a 1's complement representation of the actual mag
                 value = serial_list[serial_index]
                 run_length.append((get_magnitude_dc(value),
                                    get_ones_complement_bit_string(value)))
                 serial_index += 1
                 continue
-            # AC component
-            # Has a 1 byte code and literal bits following
-            # The upper 4 bits of the code represent the ZRL (how many zero's)
-            # The lower 4 bits of the code represent the length of the following bits
-            # the literal bits are a 1's complement representation of the actual mag
-            # Special code 0016 all remaining values in data unit are zero (is this just 00???)
-            # Special code F0 represents 16 zeros
-            # Neither special code is followed by the literal bits
             zero_count = 0
             while serial_index < 64 and serial_list[serial_index] == 0:
                 zero_count += 1
@@ -156,12 +145,11 @@ def jpeg_encode(input_path):
         dqt.append(L_QUANTIZATION_TABLE[index[0]][index[1]])
     file_string += bin(0xFFDB)[2:].zfill(16)  # DQT Marker
     file_string += bin(0x0043)[2:].zfill(16)  # Length (67), including the length bytes
-    file_string += bin(0x00)[2:].zfill(8)  # Table value sizes (0 means 1 byte) and table identifier 0
+    file_string += bin(0x00)[2:].zfill(8)  # Table value sizes and table identifier 0
     for value in dqt:
         file_string += (bin(value)[2:]).zfill(8)  # Add each table value
 
     # Encode the huffman table
-    # TODO: FIX THIS
     file_string += bin(0xFFC4)[2:].zfill(16)  # DHT MARKER
 
     # Create bitstring representation for the huffman tables
@@ -214,14 +202,25 @@ def jpeg_encode(input_path):
     file_string += bin(0x00)[2:].zfill(8)  # Successive approximation
 
     # Dump the scan data
+    scan_string = ''
     for run_length in run_lengthed_lists:
         for mag, literal in run_length:
-            file_string += mag + literal
+            scan_string += mag + literal
 
-    # Add throw away bits to make it a byte
-    if len(file_string) % 8:
-        for bit in range(8 - len(file_string) % 8):
-            file_string += '1'
+    # Add throw away bits to make it end on a byte
+    if len(scan_string) % 8:
+        for bit in range(8 - len(scan_string) % 8):
+            scan_string += '1'
+
+    # Zero pad any 0xFF bytes
+    bytez = [scan_string[index:index+8] for
+             index in range(0, len(scan_string), 8)]
+    for index, byte in enumerate(bytez):
+        if byte == '11111111':
+            bytez[index] = '1111111100000000'
+
+    # Add to file string
+    file_string += ''.join(bytez)
 
     # EOI
     file_string += bin(0xFFD9)[2:].zfill(16)
@@ -232,22 +231,5 @@ def jpeg_encode(input_path):
     bytez = [int(byte, 2) for byte in bytez]
 
     # Write all the bites to a file
-    with open('test.jpg', 'wb') as fp:
-        fp.write(bytes(bytez))
-
-
-    # Temp print to show this works
-    print('{} {} {}'.format(len(lum_matrices), len(chromb_matrices),
-                            len(chromr_matrices)))
-    print('{}'.format(len(run_lengthed_lists)))
-    # print(lum_matrices)
-    # print(chromb_matrices)
-    # print(chromr_matrices)
-    # print(zigzaged_lists)
-    # print(run_lengthed_lists)
-
-
-
-
-
-
+    with open('test.jpg', 'wb') as filepointer:
+        filepointer.write(bytes(bytez))

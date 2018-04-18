@@ -10,4 +10,4 @@ install:
 # command to run tests
 script:
   - make test
-  - pipenv run flake8  # pylint is too aggresive to fail the lint step
+  - pipenv run flake8 --max-line-length=99 # pylint is too aggresive to fail the lint step

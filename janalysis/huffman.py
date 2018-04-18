@@ -65,8 +65,9 @@ def _create_huffman_tree(symbols):
         smallest = priority_queue.get()
         next_smallest = priority_queue.get()
         internal_node = _HuffmanNode(None,
-                                     smallest.frequency+next_smallest.frequency
-                                     )
+                                     smallest.frequency
+                                     +next_smallest.frequency
+                                    )
         internal_node.left = smallest
         internal_node.right = next_smallest
         priority_queue.put(internal_node)
