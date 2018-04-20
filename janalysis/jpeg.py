@@ -1,4 +1,5 @@
 """Implements the JPEG compression algorithm."""
+import math
 import numpy
 from .dct import dct2_twod_orthonormal, dct2_scipy
 from .huffman import JPEG_HUFFMAN_DC_LUM, JPEG_HUFFMAN_AC_LUM
@@ -24,8 +25,23 @@ L_QUANTIZATION_TABLE = numpy.array([[16, 11, 10, 16, 24, 40, 51, 61],
                                     [72, 92, 95, 98, 112, 100, 103, 99]])
 
 
-def jpeg_encode(input_path):
+def jpeg_encode(input_path, scale_factor, output_path):
     """Implements JPEG compression."""
+    # Adjust quantization table
+    scaled_quant_table = L_QUANTIZATION_TABLE
+    for row in scaled_quant_table:
+        for index, value in enumerate(row):
+            if value * scale_factor <= 255 and value * scale_factor >= 1:
+                row[index] = int(value * scale_factor)
+            elif value * scale_factor > 255:
+                row[index] = 255
+            else:
+                row[index] = 1
+
+    # Display new quantization table to be used
+    print('New quantization table after scaling:')
+    print(scaled_quant_table)
+
     # Extract the data into pixel matrices of the Y, Cb, Cr components
     original = get_image(input_path)
     crop = crop_image_to_multiple_eight(original)
@@ -55,7 +71,7 @@ def jpeg_encode(input_path):
     # Quantize all
     for matrices in all_matrices:
         for index, matrix in enumerate(matrices):
-            matrices[index] = matrix / L_QUANTIZATION_TABLE
+            matrices[index] = matrix / scaled_quant_table
 
     # Round (just cast everything to an integer, this doesn't have to be exact)
     for matrices in all_matrices:
@@ -142,7 +158,7 @@ def jpeg_encode(input_path):
     # Encode the quantization table
     dqt = []
     for index in ZIGZAG_ORDER:
-        dqt.append(L_QUANTIZATION_TABLE[index[0]][index[1]])
+        dqt.append(scaled_quant_table[index[0]][index[1]])
     file_string += bin(0xFFDB)[2:].zfill(16)  # DQT Marker
     file_string += bin(0x0043)[2:].zfill(16)  # Length (67), including the length bytes
     file_string += bin(0x00)[2:].zfill(8)  # Table value sizes and table identifier 0
@@ -231,5 +247,5 @@ def jpeg_encode(input_path):
     bytez = [int(byte, 2) for byte in bytez]
 
     # Write all the bites to a file
-    with open('test.jpg', 'wb') as filepointer:
+    with open(output_path, 'wb') as filepointer:
         filepointer.write(bytes(bytez))
