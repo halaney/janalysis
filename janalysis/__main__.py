@@ -1,17 +1,36 @@
 """Defines a cli entrypoint for the encoder to run."""
 import os
 import sys
+import time
 from .jpeg import jpeg_encode, L_QUANTIZATION_TABLE
 
 
 def main():
     """Gets the options for converting a PNG to a JPEG."""
-    inputfile = input('Enter PNG file to convert to a jpeg: ')
-    outputfile = input('Enter desired name of output file: ')
-    print('Original quantization matrix:')
-    print(L_QUANTIZATION_TABLE)
-    scalefactor = float(input('Enter scaling factor for quantization matrix: '))
-    jpeg_encode(inputfile, scalefactor, outputfile)
+    inputfile = None
+    outputfile = None
+    scalefactor = None
+    use_fct = 'y'
+    if len(sys.argv) > 1:
+        # Command line options used
+        inputfile = sys.argv[1]
+        outputfile = sys.argv[2]
+        scalefactor = float(sys.argv[3])
+    else:
+        # Prompt for settings
+        inputfile = input('Enter PNG file to convert to a jpeg: ')
+        outputfile = input('Enter desired name of output file: ')
+        print('Original quantization matrix:')
+        print(L_QUANTIZATION_TABLE)
+        scalefactor = float(input('Enter scaling factor for quantization matrix: '))
+        use_fct = input('Use FCT instead of regular DCT? (y/n): ')
+    start_time = time.time()
+    if use_fct == 'y':
+        jpeg_encode(inputfile, scalefactor, outputfile)
+    else:
+        jpeg_encode(inputfile, scalefactor, outputfile, False)
+    end_time = time.time()
+    print('Time taken to convert image: {:.2f}'.format(end_time - start_time))
     original_size = os.path.getsize(inputfile)
     new_size = os.path.getsize(outputfile)
     print('PNG file size: {} bytes'.format(original_size))

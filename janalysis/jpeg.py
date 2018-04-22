@@ -10,8 +10,8 @@ from .utils import ZIGZAG_ORDER, get_huffman_table_bit_string
 from .utils import get_magnitude_dc, get_ones_complement_bit_string
 
 
-# Make this a command line arg
-USE_MY_DCT = False  # Too slow
+# Set numpy printing options to print floats reasonably
+numpy.set_printoptions(precision=2, suppress=True)
 
 
 # Currently just using one quantization table for the whole file
@@ -25,7 +25,85 @@ L_QUANTIZATION_TABLE = numpy.array([[16, 11, 10, 16, 24, 40, 51, 61],
                                     [72, 92, 95, 98, 112, 100, 103, 99]])
 
 
-def jpeg_encode(input_path, scale_factor, output_path):
+def _take_dct_of_component(component, use_fct=True):
+    for index, matrix in enumerate(component):
+        if use_fct:
+            component[index] = dct2_scipy(matrix)
+        else:
+            component[index] = dct2_twod_orthonormal(matrix)
+
+
+def _quantize_component(component, quantization_table):
+    for index, matrix in enumerate(component):
+        component[index] = matrix / quantization_table
+
+
+def _encode_dc(component):
+    for index, matrix in reversed(list(enumerate(component))):
+        if index == 0:
+            continue  # Don't subtract the first DC term
+        component[index][0][0] = matrix[0][0] - component[index - 1][0][0]
+
+
+def _zigzag_all(interleaved):
+    zigzaged_lists = []
+    for matrix in interleaved:
+        zigzaged_matrix = []
+        for index in ZIGZAG_ORDER:
+            zigzaged_matrix.append(matrix[index[0]][index[1]])
+        zigzaged_lists.append(zigzaged_matrix)
+    return zigzaged_lists
+
+
+def _run_length_encode(serial_list):
+    serial_index = 0
+    run_length = []
+    while serial_index < 64:
+        if serial_index == 0:
+            value = serial_list[serial_index]
+            run_length.append((get_magnitude_dc(value),
+                               get_ones_complement_bit_string(value)))
+            serial_index += 1
+            continue
+        zero_count = 0
+        while serial_index < 64 and serial_list[serial_index] == 0:
+            zero_count += 1
+            serial_index += 1
+        if serial_index == 64:  # Rest of the block is zero
+            run_length.append((0x00, ''))
+            break
+        while zero_count > 15:  # Encode as 16 zeroes as needed till nonzero
+            run_length.append((0xF0, ''))
+            zero_count -= 16
+        nonzero_value = serial_list[serial_index]
+        zero_count <<= 4
+        zrl = zero_count | get_magnitude_dc(nonzero_value)
+        run_length.append((zrl,
+                           get_ones_complement_bit_string(nonzero_value)))
+        serial_index += 1
+    return run_length
+
+
+def _huffman_encode(run_length):
+    for index, tup in enumerate(run_length):
+        # Just using the luminance tables for simplicity
+        if index == 0:
+            tup = run_length[index]
+            run_length[index] = (JPEG_HUFFMAN_DC_LUM[tup[0]], tup[1])
+        else:
+            tup = run_length[index]
+            run_length[index] = (JPEG_HUFFMAN_AC_LUM[tup[0]], tup[1])
+
+
+def _dump_scan_to_string(run_lengthed_lists):
+    scan_string = ''
+    for run_length in run_lengthed_lists:
+        for mag, literal in run_length:
+            scan_string += mag + literal
+    return scan_string
+
+
+def jpeg_encode(input_path, scale_factor, output_path, use_fct=True):
     """Implements JPEG compression."""
     # Adjust quantization table
     scaled_quant_table = L_QUANTIZATION_TABLE
@@ -39,7 +117,7 @@ def jpeg_encode(input_path, scale_factor, output_path):
                 row[index] = 1
 
     # Display new quantization table to be used
-    print('New quantization table after scaling:')
+    print('New quantization matrix after scaling:')
     print(scaled_quant_table)
 
     # Extract the data into pixel matrices of the Y, Cb, Cr components
@@ -60,30 +138,34 @@ def jpeg_encode(input_path, scale_factor, output_path):
         for matrix in matrices:
             matrix -= 128
 
+    # Print lum matrix before taking DCT
+    print('Luminance matrix before DCT:')
+    print(all_matrices[0][0])
+
     # Take DCT of all
     for matrices in all_matrices:
-        for index, matrix in enumerate(matrices):
-            if USE_MY_DCT:
-                matrices[index] = dct2_twod_orthonormal(matrix)
-            else:
-                matrices[index] = dct2_scipy(matrix)
+        _take_dct_of_component(matrices, use_fct)
+
+    # Display a Y block before quantization
+    print('First Y block before quantization:')
+    print(all_matrices[0][0])
 
     # Quantize all
     for matrices in all_matrices:
-        for index, matrix in enumerate(matrices):
-            matrices[index] = matrix / scaled_quant_table
+        _quantize_component(matrices, scaled_quant_table)
 
     # Round (just cast everything to an integer, this doesn't have to be exact)
     for matrices in all_matrices:
         for index, matrix in enumerate(matrices):
             matrices[index] = matrix.astype(numpy.int32)
 
+    # Display a Y block after quantization
+    print('First Y block after quantization:')
+    print(all_matrices[0][0])
+
     # Subtract DC components
     for matrices in all_matrices:
-        for index, matrix in reversed(list(enumerate(matrices))):
-            if index == 0:
-                continue  # Don't subtract the first DC term
-            matrices[index][0][0] = matrix[0][0] - matrices[index - 1][0][0]
+        _encode_dc(matrices)
 
     # Interleave the components
     length_of_components = len(all_matrices[0])
@@ -94,53 +176,16 @@ def jpeg_encode(input_path, scale_factor, output_path):
         interleaved.append(all_matrices[2][index])  # Append the Cr component
 
     # Zigzag all into a list of lists (each list is the zigzag of a block)
-    zigzaged_lists = []
-    for matrix in interleaved:
-        zigzaged_matrix = []
-        for index in ZIGZAG_ORDER:
-            zigzaged_matrix.append(matrix[index[0]][index[1]])
-        zigzaged_lists.append(zigzaged_matrix)
+    zigzaged_lists = _zigzag_all(interleaved)
 
     # Run length encode all
     run_lengthed_lists = []
     for serial_list in zigzaged_lists:
-        serial_index = 0
-        run_length = []
-        while serial_index < 64:
-            if serial_index == 0:
-                value = serial_list[serial_index]
-                run_length.append((get_magnitude_dc(value),
-                                   get_ones_complement_bit_string(value)))
-                serial_index += 1
-                continue
-            zero_count = 0
-            while serial_index < 64 and serial_list[serial_index] == 0:
-                zero_count += 1
-                serial_index += 1
-            if serial_index == 64:  # Rest of the block is zero
-                run_length.append((0x00, ''))
-                break
-            while zero_count > 15:  # Encode as 16 zeroes as needed till nonzero
-                run_length.append((0xF0, ''))
-                zero_count -= 16
-            nonzero_value = serial_list[serial_index]
-            zero_count <<= 4
-            zrl = zero_count | get_magnitude_dc(nonzero_value)
-            run_length.append((zrl,
-                               get_ones_complement_bit_string(nonzero_value)))
-            serial_index += 1
-        run_lengthed_lists.append(run_length)
+        run_lengthed_lists.append(_run_length_encode(serial_list))
 
     # Huffman encode the whole scan
     for run_length in run_lengthed_lists:
-        for index, tup in enumerate(run_length):
-            # Just using the luminance tables for simplicity
-            if index == 0:
-                tup = run_length[index]
-                run_length[index] = (JPEG_HUFFMAN_DC_LUM[tup[0]], tup[1])
-            else:
-                tup = run_length[index]
-                run_length[index] = (JPEG_HUFFMAN_AC_LUM[tup[0]], tup[1])
+        _huffman_encode(run_length)
 
     # Format file, add DQT, DHT, and scan
     file_string = bin(0xFFD8)[2:].zfill(16)  # SOI
@@ -218,10 +263,7 @@ def jpeg_encode(input_path, scale_factor, output_path):
     file_string += bin(0x00)[2:].zfill(8)  # Successive approximation
 
     # Dump the scan data
-    scan_string = ''
-    for run_length in run_lengthed_lists:
-        for mag, literal in run_length:
-            scan_string += mag + literal
+    scan_string = _dump_scan_to_string(run_lengthed_lists)
 
     # Add throw away bits to make it end on a byte
     if len(scan_string) % 8:
