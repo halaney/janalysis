@@ -22,7 +22,7 @@ VERSION = None
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'pytest', 'scipy', 'numpy', 'ipython', 'Pillow'
+    'pytest', 'scipy', 'numpy', 'ipython', 'Pillow', 'matplotlib'
 ]
 
 # The rest you shouldn't have to touch too much :)

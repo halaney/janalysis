@@ -1,6 +1,12 @@
-"""Defines functions to make huffman coding of values (not really specific
-to JPEG at all (certain specifics about JPEG are currently ignored such as
-the rule about 1's and the rule about code length).
+"""Defines functions to generate huffman codes given a list of symbols.
+
+These functions aren't actually used by the jpeg-encoder, but serve as a decent
+example of huffman coding. The reason they aren't used is because JPEG
+adds some rules on the huffman codes generated and I didn't have time to sort
+out how that changes code generation (16 bit max code length, no code is all
+1's). Also defined here are some of the default huffman tables that the JPEG
+standard recommends if generation isn't possible (these are used in the actual
+jpeg-encoder entrypoint).
 """
 import queue
 

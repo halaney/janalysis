@@ -66,7 +66,7 @@ def get_magnitude_dc(value):
 
 
 def get_ones_complement_bit_string(value):
-    """Returns the ones complement bit string of a value (TODO: FOR DC ONLY?)"""
+    """Returns the ones complement bit string of a value."""
     if value == 0:
         return ''
     negative = False

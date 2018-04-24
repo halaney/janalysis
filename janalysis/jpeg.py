@@ -1,5 +1,4 @@
 """Implements the JPEG compression algorithm."""
-import math
 import numpy
 from .dct import dct2_twod_orthonormal, dct2_scipy
 from .huffman import JPEG_HUFFMAN_DC_LUM, JPEG_HUFFMAN_AC_LUM
@@ -26,6 +25,7 @@ L_QUANTIZATION_TABLE = numpy.array([[16, 11, 10, 16, 24, 40, 51, 61],
 
 
 def _take_dct_of_component(component, use_fct=True):
+    """Selects which DCT to use (mine or scipy's FCT)."""
     for index, matrix in enumerate(component):
         if use_fct:
             component[index] = dct2_scipy(matrix)
@@ -34,11 +34,13 @@ def _take_dct_of_component(component, use_fct=True):
 
 
 def _quantize_component(component, quantization_table):
+    """Quantizes a whole color component (this should be a list matrices)."""
     for index, matrix in enumerate(component):
         component[index] = matrix / quantization_table
 
 
 def _encode_dc(component):
+    """Perform differential pulse-code modulation on the DC coefficients."""
     for index, matrix in reversed(list(enumerate(component))):
         if index == 0:
             continue  # Don't subtract the first DC term
@@ -46,6 +48,7 @@ def _encode_dc(component):
 
 
 def _zigzag_all(interleaved):
+    """Zigzag all of the blocks (creating a list of lists)."""
     zigzaged_lists = []
     for matrix in interleaved:
         zigzaged_matrix = []
@@ -56,6 +59,7 @@ def _zigzag_all(interleaved):
 
 
 def _run_length_encode(serial_list):
+    """Perform run length encoding on a serialized block."""
     serial_index = 0
     run_length = []
     while serial_index < 64:
@@ -85,6 +89,7 @@ def _run_length_encode(serial_list):
 
 
 def _huffman_encode(run_length):
+    """Replace the symbols with their appropriate huffman code."""
     for index, tup in enumerate(run_length):
         # Just using the luminance tables for simplicity
         if index == 0:
@@ -96,6 +101,7 @@ def _huffman_encode(run_length):
 
 
 def _dump_scan_to_string(run_lengthed_lists):
+    """Dump the whole scan into a 'binary' string."""
     scan_string = ''
     for run_length in run_lengthed_lists:
         for mag, literal in run_length:
@@ -147,7 +153,7 @@ def jpeg_encode(input_path, scale_factor, output_path, use_fct=True):
         _take_dct_of_component(matrices, use_fct)
 
     # Display a Y block before quantization
-    print('First Y block before quantization:')
+    print('First luminance block before quantization:')
     print(all_matrices[0][0])
 
     # Quantize all
@@ -160,7 +166,7 @@ def jpeg_encode(input_path, scale_factor, output_path, use_fct=True):
             matrices[index] = matrix.astype(numpy.int32)
 
     # Display a Y block after quantization
-    print('First Y block after quantization:')
+    print('First luminance block after quantization:')
     print(all_matrices[0][0])
 
     # Subtract DC components
@@ -288,6 +294,6 @@ def jpeg_encode(input_path, scale_factor, output_path, use_fct=True):
              index in range(0, len(file_string), 8)]
     bytez = [int(byte, 2) for byte in bytez]
 
-    # Write all the bites to a file
+    # Write all the bytes to a file
     with open(output_path, 'wb') as filepointer:
         filepointer.write(bytes(bytez))
